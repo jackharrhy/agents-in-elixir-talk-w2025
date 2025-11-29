@@ -1,0 +1,15 @@
+# Dependencies
+/deps/
+/_build/
+
+# Data
+/priv/data/
+/priv/uploads/
+
+# IDE
+.elixir_ls/
+
+# Mix
+*.lock
+erl_crash.dump
+

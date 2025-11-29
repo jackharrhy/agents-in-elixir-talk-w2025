@@ -1,0 +1,13 @@
+{
+  "name": "3-js-agent",
+  "type": "module",
+  "scripts": {
+    "start": "node 3-agent.mjs"
+  },
+  "dependencies": {
+    "@ai-sdk/openai": "^2",
+    "ai": "^5",
+    "express": "^4",
+    "zod": "^4"
+  }
+}

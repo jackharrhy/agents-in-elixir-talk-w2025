@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chat</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: "Berkeley Mono", "SF Mono", Consolas, monospace;
+      background: #0a0a0a;
+      color: #e0e0e0;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    #messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 2rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    .message {
+      max-width: 80%;
+      line-height: 1.6;
+      white-space: pre-wrap;
+    }
+
+    .message.user {
+      align-self: flex-end;
+      background: #1a3a5c;
+      padding: 1rem 1.25rem;
+      border-radius: 1rem 1rem 0.25rem 1rem;
+    }
+
+    .message.assistant {
+      align-self: flex-start;
+    }
+
+    .message.assistant .reasoning {
+      color: #6b7280;
+      font-size: 0.875rem;
+      margin-bottom: 0.75rem;
+      padding-left: 1rem;
+      border-left: 2px solid #374151;
+    }
+
+    .message.assistant .content {
+      color: #f0f0f0;
+    }
+
+    #input-area {
+      padding: 1.5rem 2rem;
+      background: #111;
+      border-top: 1px solid #222;
+    }
+
+    #input-area form {
+      display: flex;
+      gap: 1rem;
+    }
+
+    #input-area input {
+      flex: 1;
+      padding: 1rem 1.25rem;
+      font-size: 1rem;
+      font-family: inherit;
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 0.5rem;
+      color: #e0e0e0;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    #input-area input:focus {
+      border-color: #4a9eff;
+    }
+
+    #input-area input:disabled {
+      opacity: 0.5;
+    }
+
+    #input-area button {
+      padding: 1rem 2rem;
+      font-size: 1rem;
+      font-family: inherit;
+      background: #2563eb;
+      color: white;
+      border: none;
+      border-radius: 0.5rem;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    #input-area button:hover:not(:disabled) {
+      background: #1d4ed8;
+    }
+
+    #input-area button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+  </style>
+</head>
+<body>
+  <div id="messages"></div>
+  <div id="input-area">
+    <form id="chat-form">
+      <input type="text" id="input" placeholder="Type a message..." autocomplete="off" autofocus>
+      <button type="submit">Send</button>
+    </form>
+  </div>
+
+  <script>
+    const messages = document.getElementById("messages");
+    const form = document.getElementById("chat-form");
+    const input = document.getElementById("input");
+
+    let prevId = null;
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const message = input.value.trim();
+      if (!message) return;
+
+      // Add user message
+      const userDiv = document.createElement("div");
+      userDiv.className = "message user";
+      userDiv.textContent = message;
+      messages.appendChild(userDiv);
+
+      input.value = "";
+      input.disabled = true;
+      form.querySelector("button").disabled = true;
+
+      // Add assistant message container
+      const assistantDiv = document.createElement("div");
+      assistantDiv.className = "message assistant";
+      
+      const reasoningDiv = document.createElement("div");
+      reasoningDiv.className = "reasoning";
+      reasoningDiv.style.display = "none";
+      
+      const contentDiv = document.createElement("div");
+      contentDiv.className = "content";
+      
+      assistantDiv.appendChild(reasoningDiv);
+      assistantDiv.appendChild(contentDiv);
+      messages.appendChild(assistantDiv);
+
+      messages.scrollTop = messages.scrollHeight;
+
+      try {
+        const res = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message, prevId }),
+        });
+
+        if (!res.ok) {
+          const err = await res.json();
+          contentDiv.textContent = `Error: ${err.error}`;
+          return;
+        }
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop();
+
+          for (const line of lines) {
+            if (!line.startsWith("data: ")) continue;
+            const data = line.slice(6);
+            if (data === "[DONE]") continue;
+
+            let event;
+            try {
+              event = JSON.parse(data);
+            } catch {
+              continue;
+            }
+
+            switch (event.type) {
+              case "response.reasoning_summary_part.added":
+                reasoningDiv.style.display = "block";
+                break;
+
+              case "response.reasoning_summary_text.delta":
+                reasoningDiv.textContent += event.delta ?? "";
+                break;
+
+              case "response.output_text.delta":
+                contentDiv.textContent += event.delta ?? "";
+                break;
+
+              case "response.completed":
+                prevId = event.response?.id ?? null;
+                break;
+            }
+
+            messages.scrollTop = messages.scrollHeight;
+          }
+        }
+      } catch (err) {
+        contentDiv.textContent = `Error: ${err.message}`;
+      } finally {
+        input.disabled = false;
+        form.querySelector("button").disabled = false;
+        input.focus();
+      }
+    });
+  </script>
+</body>
+</html>

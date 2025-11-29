@@ -1,0 +1,1028 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Elixir Agent</title>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: "Berkeley Mono", "SF Mono", Consolas, monospace;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+      color: #e0e0e0;
+      height: 100vh;
+      display: flex;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      width: 280px;
+      background: rgba(0, 0, 0, 0.4);
+      border-right: 1px solid rgba(233, 69, 96, 0.2);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .sidebar-header {
+      padding: 1.5rem;
+      border-bottom: 1px solid rgba(233, 69, 96, 0.2);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .sidebar-header h1 {
+      font-size: 1rem;
+      font-weight: 500;
+      color: #e94560;
+    }
+
+    .new-chat-btn {
+      padding: 0.5rem 1rem;
+      font-size: 0.8rem;
+      font-family: inherit;
+      background: linear-gradient(135deg, #e94560 0%, #ff6b6b 100%);
+      color: white;
+      border: none;
+      border-radius: 0.5rem;
+      cursor: pointer;
+      transition: transform 0.1s, box-shadow 0.2s;
+    }
+
+    .new-chat-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(233, 69, 96, 0.4);
+    }
+
+    .chat-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 0.5rem;
+    }
+
+    .chat-item {
+      padding: 0.75rem 1rem;
+      margin: 0.25rem 0;
+      border-radius: 0.5rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      transition: background 0.2s;
+    }
+
+    .chat-item:hover {
+      background: rgba(233, 69, 96, 0.1);
+    }
+
+    .chat-item.active {
+      background: rgba(233, 69, 96, 0.2);
+      border: 1px solid rgba(233, 69, 96, 0.3);
+    }
+
+    .chat-item .status {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #4a5568;
+      flex-shrink: 0;
+    }
+
+    .chat-item .delete-btn {
+      opacity: 0;
+      padding: 0.25rem 0.5rem;
+      font-size: 0.75rem;
+      background: transparent;
+      color: #f87171;
+      border: 1px solid transparent;
+      border-radius: 0.25rem;
+      cursor: pointer;
+      transition: opacity 0.2s, background 0.2s, border-color 0.2s;
+      flex-shrink: 0;
+    }
+
+    .chat-item:hover .delete-btn {
+      opacity: 1;
+    }
+
+    .chat-item .delete-btn:hover {
+      background: rgba(248, 113, 113, 0.1);
+      border-color: rgba(248, 113, 113, 0.3);
+    }
+
+    .chat-item .status.online {
+      background: #48bb78;
+      box-shadow: 0 0 8px rgba(72, 187, 120, 0.5);
+    }
+
+    .chat-item .title {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 0.9rem;
+    }
+
+    /* Main content */
+    .main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      padding: 1rem 2rem;
+      background: rgba(0, 0, 0, 0.3);
+      border-bottom: 1px solid rgba(233, 69, 96, 0.2);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    header h2 {
+      font-size: 1rem;
+      font-weight: 500;
+      color: #e94560;
+    }
+
+    .upload-btn {
+      padding: 0.5rem 1rem;
+      font-size: 0.8rem;
+      font-family: inherit;
+      background: transparent;
+      color: #e94560;
+      border: 1px solid rgba(233, 69, 96, 0.4);
+      border-radius: 0.5rem;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .upload-btn:hover {
+      background: rgba(233, 69, 96, 0.1);
+    }
+
+    #messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 2rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    .message {
+      max-width: 85%;
+      line-height: 1.6;
+    }
+
+    .message.user {
+      align-self: flex-end;
+      background: linear-gradient(135deg, #e94560 0%, #ff6b6b 100%);
+      padding: 1rem 1.25rem;
+      border-radius: 1rem 1rem 0.25rem 1rem;
+      box-shadow: 0 2px 8px rgba(233, 69, 96, 0.3);
+    }
+
+    .message.assistant {
+      align-self: flex-start;
+    }
+
+    .message.assistant .content {
+      color: #f0f0f0;
+    }
+
+    .message.assistant .text {
+      display: block;
+    }
+
+    /* Markdown styles */
+    .message.assistant .text p {
+      margin: 0.5em 0;
+    }
+
+    .message.assistant .text p:first-child {
+      margin-top: 0;
+    }
+
+    .message.assistant .text p:last-child {
+      margin-bottom: 0;
+    }
+
+    .message.assistant .text code {
+      background: rgba(0, 0, 0, 0.3);
+      padding: 0.2em 0.4em;
+      border-radius: 0.25rem;
+      font-size: 0.9em;
+    }
+
+    .message.assistant .text pre {
+      background: rgba(0, 0, 0, 0.4);
+      padding: 1rem;
+      border-radius: 0.5rem;
+      overflow-x: auto;
+      margin: 0.75em 0;
+    }
+
+    .message.assistant .text pre code {
+      background: none;
+      padding: 0;
+      font-size: 0.85em;
+      line-height: 1.5;
+    }
+
+    .message.assistant .text ul,
+    .message.assistant .text ol {
+      margin: 0.5em 0;
+      padding-left: 1.5em;
+    }
+
+    .message.assistant .text li {
+      margin: 0.25em 0;
+    }
+
+    .message.assistant .text h1,
+    .message.assistant .text h2,
+    .message.assistant .text h3 {
+      margin: 1em 0 0.5em 0;
+      color: #e94560;
+    }
+
+    .message.assistant .text h1:first-child,
+    .message.assistant .text h2:first-child,
+    .message.assistant .text h3:first-child {
+      margin-top: 0;
+    }
+
+    .message.assistant .text blockquote {
+      border-left: 3px solid #e94560;
+      padding-left: 1rem;
+      margin: 0.5em 0;
+      color: #9ca3af;
+    }
+
+    .message.assistant .text a {
+      color: #e94560;
+      text-decoration: none;
+    }
+
+    .message.assistant .text a:hover {
+      text-decoration: underline;
+    }
+
+    .message.assistant .text table {
+      border-collapse: collapse;
+      margin: 0.75em 0;
+      width: 100%;
+    }
+
+    .message.assistant .text th,
+    .message.assistant .text td {
+      border: 1px solid rgba(233, 69, 96, 0.3);
+      padding: 0.5em 0.75em;
+      text-align: left;
+    }
+
+    .message.assistant .text th {
+      background: rgba(233, 69, 96, 0.1);
+    }
+
+    .tool-call {
+      background: rgba(72, 187, 120, 0.1);
+      border: 1px solid rgba(72, 187, 120, 0.3);
+      border-radius: 0.5rem;
+      margin: 0.75rem 0;
+      overflow: hidden;
+    }
+
+    .tool-call-header {
+      background: rgba(72, 187, 120, 0.15);
+      padding: 0.5rem 0.75rem;
+      font-size: 0.8rem;
+      color: #48bb78;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .tool-call-header::before {
+      content: "⚡";
+    }
+
+    .tool-call-command {
+      padding: 0.75rem;
+      font-size: 0.85rem;
+      color: #fbbf24;
+      background: rgba(0, 0, 0, 0.2);
+      border-bottom: 1px solid rgba(72, 187, 120, 0.2);
+    }
+
+    .tool-call-output {
+      padding: 0.75rem;
+      font-size: 0.8rem;
+      color: #9ca3af;
+      max-height: 300px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+
+    .tool-call-output.error {
+      color: #f87171;
+    }
+
+    .tool-call.pending .tool-call-output {
+      color: #6b7280;
+      font-style: italic;
+    }
+
+    #input-area {
+      padding: 1.5rem 2rem;
+      background: rgba(0, 0, 0, 0.4);
+      border-top: 1px solid rgba(233, 69, 96, 0.2);
+    }
+
+    #input-area form {
+      display: flex;
+      gap: 1rem;
+    }
+
+    #input-area input {
+      flex: 1;
+      padding: 1rem 1.25rem;
+      font-size: 1rem;
+      font-family: inherit;
+      background: rgba(30, 30, 50, 0.8);
+      border: 1px solid rgba(233, 69, 96, 0.3);
+      border-radius: 0.5rem;
+      color: #e0e0e0;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    #input-area input:focus {
+      border-color: #e94560;
+      box-shadow: 0 0 0 2px rgba(233, 69, 96, 0.2);
+    }
+
+    #input-area input:disabled {
+      opacity: 0.5;
+    }
+
+    #input-area button {
+      padding: 1rem 2rem;
+      font-size: 1rem;
+      font-family: inherit;
+      background: linear-gradient(135deg, #e94560 0%, #ff6b6b 100%);
+      color: white;
+      border: none;
+      border-radius: 0.5rem;
+      cursor: pointer;
+      transition: transform 0.1s, box-shadow 0.2s;
+    }
+
+    #input-area button:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(233, 69, 96, 0.4);
+    }
+
+    #input-area button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .thinking {
+      display: inline-flex;
+      gap: 0.25rem;
+      padding: 0.5rem 0;
+    }
+
+    .thinking span {
+      width: 6px;
+      height: 6px;
+      background: #e94560;
+      border-radius: 50%;
+      animation: bounce 1.4s ease-in-out infinite;
+    }
+
+    .thinking span:nth-child(1) { animation-delay: 0s; }
+    .thinking span:nth-child(2) { animation-delay: 0.2s; }
+    .thinking span:nth-child(3) { animation-delay: 0.4s; }
+
+    @keyframes bounce {
+      0%, 80%, 100% { transform: translateY(0); }
+      40% { transform: translateY(-8px); }
+    }
+
+    .empty-state {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: #6b7280;
+      gap: 1rem;
+    }
+
+    .empty-state .icon {
+      font-size: 3rem;
+    }
+
+    #file-input {
+      display: none;
+    }
+
+    .file-uploaded {
+      background: rgba(233, 69, 96, 0.1);
+      border: 1px solid rgba(233, 69, 96, 0.3);
+      padding: 0.5rem 0.75rem;
+      border-radius: 0.5rem;
+      font-size: 0.85rem;
+      color: #e94560;
+      margin-bottom: 0.5rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <h1>🔮 Elixir Agent</h1>
+      <button class="new-chat-btn" id="new-chat">+ New</button>
+    </div>
+    <div class="chat-list" id="chat-list"></div>
+  </div>
+
+  <div class="main">
+    <header>
+      <h2 id="chat-title">Select a chat</h2>
+      <button class="upload-btn" id="upload-btn">📎 Upload</button>
+    </header>
+    
+    <div id="messages">
+      <div class="empty-state">
+        <div class="icon">💬</div>
+        <div>Create a new chat or select one from the sidebar</div>
+      </div>
+    </div>
+    
+    <div id="input-area">
+      <form id="chat-form">
+        <input type="text" id="input" placeholder="Ask me to run commands..." autocomplete="off" disabled>
+        <button type="submit" disabled>Send</button>
+      </form>
+    </div>
+  </div>
+
+  <input type="file" id="file-input" accept=".txt,.md,.json,.pdf,.docx,.doc,.odt,.rtf,.epub,.rst,.tex,.org,.csv,.xml,.html,.css,.js,.ts,.ex,.exs,.py,.rb,.go,.rs,.c,.h,.cpp,.java">
+
+  <script>
+    const chatList = document.getElementById("chat-list");
+    const messagesEl = document.getElementById("messages");
+    const form = document.getElementById("chat-form");
+    const input = document.getElementById("input");
+    const chatTitle = document.getElementById("chat-title");
+    const newChatBtn = document.getElementById("new-chat");
+    const uploadBtn = document.getElementById("upload-btn");
+    const fileInput = document.getElementById("file-input");
+
+    let currentChatId = null;
+    let toolCalls = {};
+    let currentSubscription = null;
+    let streamingTextSpan = null;
+    let streamingContentDiv = null;
+    let currentStreamText = "";
+
+    // Load chats on startup
+    loadChats();
+
+    newChatBtn.addEventListener("click", createNewChat);
+    uploadBtn.addEventListener("click", () => fileInput.click());
+    fileInput.addEventListener("change", handleFileUpload);
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      if (!currentChatId) return;
+      
+      const message = input.value.trim();
+      if (!message) return;
+
+      // Cancel existing subscription to avoid duplicate events
+      if (currentSubscription) {
+        currentSubscription.abort();
+        currentSubscription = null;
+      }
+
+      // Add user message to UI
+      addMessageToUI("user", message);
+
+      input.value = "";
+      input.disabled = true;
+      form.querySelector("button").disabled = true;
+
+      // Reset streaming state and create new assistant container
+      toolCalls = {};
+      currentStreamText = "";
+      
+      const assistantDiv = document.createElement("div");
+      assistantDiv.className = "message assistant";
+      
+      streamingContentDiv = document.createElement("div");
+      streamingContentDiv.className = "content";
+      
+      streamingTextSpan = document.createElement("span");
+      streamingTextSpan.className = "text";
+      streamingContentDiv.appendChild(streamingTextSpan);
+      
+      const thinkingDiv = document.createElement("div");
+      thinkingDiv.className = "thinking";
+      thinkingDiv.innerHTML = "<span></span><span></span><span></span>";
+      
+      assistantDiv.appendChild(thinkingDiv);
+      assistantDiv.appendChild(streamingContentDiv);
+      messagesEl.appendChild(assistantDiv);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+
+      try {
+        const res = await fetch(`/api/chats/${currentChatId}/messages`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content: message }),
+        });
+
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop();
+
+          for (const line of lines) {
+            if (!line.startsWith("data: ")) continue;
+            const data = line.slice(6);
+            if (data === "[DONE]") continue;
+
+            let part;
+            try {
+              part = JSON.parse(data);
+            } catch {
+              continue;
+            }
+
+            if (thinkingDiv.parentNode) thinkingDiv.remove();
+
+            switch (part.type) {
+              case "text-delta":
+                currentStreamText += part.text ?? "";
+                streamingTextSpan.innerHTML = marked.parse(currentStreamText);
+                break;
+
+              case "tool-call":
+                const toolCallDiv = createToolCallUI(part.toolName, part.input);
+                toolCallDiv.id = `tool-${part.toolCallId}`;
+                toolCalls[part.toolCallId] = toolCallDiv;
+                streamingContentDiv.appendChild(toolCallDiv);
+                break;
+
+              case "tool-result":
+                const existingDiv = toolCalls[part.toolCallId];
+                if (existingDiv) {
+                  updateToolCallResult(existingDiv, part.output);
+                }
+                break;
+
+              case "error":
+                streamingTextSpan.textContent = `Error: ${part.message}`;
+                break;
+            }
+
+            messagesEl.scrollTop = messagesEl.scrollHeight;
+          }
+        }
+      } catch (err) {
+        if (thinkingDiv.parentNode) thinkingDiv.remove();
+        streamingTextSpan.textContent = `Error: ${err.message}`;
+      } finally {
+        // Reset streaming state
+        streamingTextSpan = null;
+        streamingContentDiv = null;
+        currentStreamText = "";
+        
+        input.disabled = false;
+        form.querySelector("button").disabled = false;
+        input.focus();
+        loadChats();
+        
+        // Resubscribe for multi-tab sync
+        subscribeToChat(currentChatId);
+      }
+    });
+
+    async function loadChats() {
+      const res = await fetch("/api/chats");
+      const data = await res.json();
+      
+      chatList.innerHTML = "";
+      data.chats.forEach(chat => {
+        const item = document.createElement("div");
+        item.className = `chat-item${chat.id === currentChatId ? " active" : ""}`;
+        item.innerHTML = `
+          <div class="status${chat.online ? " online" : ""}"></div>
+          <div class="title">${escapeHtml(chat.title)}</div>
+          <button class="delete-btn" data-id="${chat.id}">✕</button>
+        `;
+        item.addEventListener("click", (e) => {
+          if (!e.target.classList.contains("delete-btn")) {
+            selectChat(chat.id);
+          }
+        });
+        item.querySelector(".delete-btn").addEventListener("click", (e) => {
+          e.stopPropagation();
+          deleteChat(chat.id);
+        });
+        chatList.appendChild(item);
+      });
+    }
+
+    async function deleteChat(id) {
+      if (!confirm("Delete this chat?")) return;
+      
+      await fetch(`/api/chats/${id}`, { method: "DELETE" });
+      
+      // If we deleted the current chat, clear the view
+      if (currentChatId === id) {
+        currentChatId = null;
+        chatTitle.textContent = "Select a chat";
+        messagesEl.innerHTML = `
+          <div class="empty-state">
+            <div class="icon">💬</div>
+            <div>Create a new chat or select one from the sidebar</div>
+          </div>
+        `;
+        input.disabled = true;
+        form.querySelector("button").disabled = true;
+      }
+      
+      loadChats();
+    }
+
+    async function createNewChat() {
+      const res = await fetch("/api/chats", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: "New Chat" }),
+      });
+      const data = await res.json();
+      await loadChats();
+      selectChat(data.id);
+    }
+
+    async function selectChat(id) {
+      // Cancel any existing subscription
+      if (currentSubscription) {
+        currentSubscription.abort();
+        currentSubscription = null;
+      }
+      
+      currentChatId = id;
+      streamingTextSpan = null;
+      streamingContentDiv = null;
+      currentStreamText = "";
+      toolCalls = {};
+      
+      const res = await fetch(`/api/chats/${id}`);
+      const data = await res.json();
+      
+      chatTitle.textContent = data.title;
+      input.disabled = false;
+      form.querySelector("button").disabled = false;
+      
+      // Render messages
+      messagesEl.innerHTML = "";
+      
+      // Build a map of tool call IDs to their results
+      const toolResults = {};
+      data.messages.forEach(msg => {
+        if (msg.role === "tool" && msg.tool_call_id) {
+          try {
+            toolResults[msg.tool_call_id] = JSON.parse(msg.content);
+          } catch {
+            toolResults[msg.tool_call_id] = { error: msg.content };
+          }
+        }
+      });
+      
+      data.messages.forEach(msg => {
+        if (msg.role === "user") {
+          addMessageToUI("user", msg.content);
+        } else if (msg.role === "assistant") {
+          // Create assistant message with tool calls if present
+          const div = document.createElement("div");
+          div.className = "message assistant";
+          
+          const contentDiv = document.createElement("div");
+          contentDiv.className = "content";
+          
+          // Add text content (rendered as markdown)
+          if (msg.content) {
+            const textSpan = document.createElement("span");
+            textSpan.className = "text";
+            textSpan.innerHTML = marked.parse(msg.content);
+            contentDiv.appendChild(textSpan);
+          }
+          
+          // Add tool calls with their results
+          if (msg.tool_calls && msg.tool_calls.length > 0) {
+            msg.tool_calls.forEach(tc => {
+              let tcInput = {};
+              try {
+                tcInput = JSON.parse(tc.function?.arguments || "{}");
+              } catch {}
+              
+              const toolCallDiv = createToolCallUI(tc.function?.name || "unknown", tcInput);
+              toolCallDiv.classList.remove("pending");
+              
+              // Fill in result if we have it
+              const result = toolResults[tc.id];
+              if (result) {
+                updateToolCallResult(toolCallDiv, result);
+              }
+              
+              contentDiv.appendChild(toolCallDiv);
+            });
+          }
+          
+          div.appendChild(contentDiv);
+          messagesEl.appendChild(div);
+        }
+        // Skip "tool" role messages - they're shown inline with tool calls
+      });
+      
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+      
+      // Update active state in sidebar
+      document.querySelectorAll(".chat-item").forEach(item => {
+        item.classList.remove("active");
+      });
+      event?.target?.closest?.(".chat-item")?.classList.add("active");
+      
+      loadChats();
+      input.focus();
+      
+      // Subscribe to ongoing stream (will replay buffered events if streaming)
+      subscribeToChat(id);
+    }
+    
+    async function subscribeToChat(id) {
+      // Cancel any existing subscription first
+      if (currentSubscription) {
+        currentSubscription.abort();
+        currentSubscription = null;
+      }
+      
+      const controller = new AbortController();
+      currentSubscription = controller;
+      
+      try {
+        const res = await fetch(`/api/chats/${id}/subscribe`, {
+          signal: controller.signal
+        });
+        
+        if (!res.ok) return;
+        
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop();
+          
+          for (const line of lines) {
+            // Skip heartbeats (lines starting with :)
+            if (line.startsWith(":")) continue;
+            if (!line.startsWith("data: ")) continue;
+            
+            const data = line.slice(6);
+            if (data === "[DONE]") {
+              // Stream complete, reset for next message
+              streamingContentDiv = null;
+              streamingTextSpan = null;
+              currentStreamText = "";
+              toolCalls = {};
+              input.disabled = false;
+              form.querySelector("button").disabled = false;
+              continue;
+            }
+            
+            let part;
+            try {
+              part = JSON.parse(data);
+            } catch {
+              continue;
+            }
+            
+            handleStreamEvent(part);
+          }
+        }
+      } catch (err) {
+        if (err.name !== "AbortError") {
+          console.error("Subscribe error:", err);
+          // Reconnect after a short delay if still on the same chat
+          if (currentChatId === id) {
+            setTimeout(() => subscribeToChat(id), 2000);
+          }
+        }
+      }
+    }
+    
+    function handleStreamEvent(part) {
+      // Handle connected event (no UI needed)
+      if (part.type === "connected") {
+        console.log("Subscription connected");
+        return;
+      }
+      
+      // Handle user message from another tab
+      if (part.type === "user-message") {
+        addMessageToUI("user", part.content);
+        // Reset streaming state for the upcoming assistant response
+        streamingContentDiv = null;
+        streamingTextSpan = null;
+        currentStreamText = "";
+        toolCalls = {};
+        input.disabled = true;
+        form.querySelector("button").disabled = true;
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+        return;
+      }
+      
+      // Create streaming UI if needed (for assistant events from other tabs)
+      if (!streamingContentDiv) {
+        const assistantDiv = document.createElement("div");
+        assistantDiv.className = "message assistant";
+        
+        streamingContentDiv = document.createElement("div");
+        streamingContentDiv.className = "content";
+        
+        streamingTextSpan = document.createElement("span");
+        streamingTextSpan.className = "text";
+        streamingContentDiv.appendChild(streamingTextSpan);
+        
+        assistantDiv.appendChild(streamingContentDiv);
+        messagesEl.appendChild(assistantDiv);
+        
+        // Disable input while streaming
+        input.disabled = true;
+        form.querySelector("button").disabled = true;
+      }
+      
+      switch (part.type) {
+        case "text-delta":
+          currentStreamText += part.text ?? "";
+          if (streamingTextSpan) {
+            streamingTextSpan.innerHTML = marked.parse(currentStreamText);
+          }
+          break;
+          
+        case "tool-call":
+          if (streamingContentDiv) {
+            const toolCallDiv = createToolCallUI(part.toolName, part.input);
+            toolCallDiv.id = `tool-${part.toolCallId}`;
+            toolCalls[part.toolCallId] = toolCallDiv;
+            streamingContentDiv.appendChild(toolCallDiv);
+          }
+          break;
+          
+        case "tool-result":
+          const existingDiv = toolCalls[part.toolCallId];
+          if (existingDiv) {
+            updateToolCallResult(existingDiv, part.output);
+          }
+          break;
+          
+        case "error":
+          if (streamingTextSpan) {
+            streamingTextSpan.textContent = `Error: ${part.message}`;
+          }
+          break;
+      }
+      
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+
+    async function handleFileUpload(e) {
+      if (!currentChatId || !e.target.files.length) return;
+      
+      const file = e.target.files[0];
+      const formData = new FormData();
+      formData.append("file", file);
+      
+      try {
+        const res = await fetch(`/api/chats/${currentChatId}/files`, {
+          method: "POST",
+          body: formData,
+        });
+        const data = await res.json();
+        
+        if (data.success) {
+          const notice = document.createElement("div");
+          notice.className = "file-uploaded";
+          notice.textContent = `📎 Uploaded: ${data.filename}`;
+          messagesEl.appendChild(notice);
+          messagesEl.scrollTop = messagesEl.scrollHeight;
+        } else {
+          alert(`Upload failed: ${data.error}`);
+        }
+      } catch (err) {
+        alert(`Upload error: ${err.message}`);
+      }
+      
+      fileInput.value = "";
+    }
+
+    function addMessageToUI(role, content) {
+      const div = document.createElement("div");
+      div.className = `message ${role}`;
+      
+      if (role === "assistant") {
+        const contentDiv = document.createElement("div");
+        contentDiv.className = "content";
+        const textSpan = document.createElement("span");
+        textSpan.className = "text";
+        textSpan.innerHTML = marked.parse(content);
+        contentDiv.appendChild(textSpan);
+        div.appendChild(contentDiv);
+      } else {
+        div.textContent = content;
+      }
+      
+      messagesEl.appendChild(div);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+
+    function createToolCallUI(toolName, input) {
+      const div = document.createElement("div");
+      div.className = "tool-call pending";
+      
+      const header = document.createElement("div");
+      header.className = "tool-call-header";
+      header.textContent = toolName;
+      
+      const command = document.createElement("div");
+      command.className = "tool-call-command";
+      command.textContent = input?.command || JSON.stringify(input);
+      
+      const output = document.createElement("div");
+      output.className = "tool-call-output";
+      output.textContent = "Running...";
+      
+      div.appendChild(header);
+      div.appendChild(command);
+      div.appendChild(output);
+      
+      return div;
+    }
+
+    function updateToolCallResult(div, output) {
+      div.classList.remove("pending");
+      const outputDiv = div.querySelector(".tool-call-output");
+      
+      if (!output) {
+        outputDiv.className = "tool-call-output error";
+        outputDiv.textContent = "No output";
+        return;
+      }
+      
+      if (output.success) {
+        outputDiv.textContent = output.stdout;
+      } else {
+        outputDiv.className = "tool-call-output error";
+        outputDiv.textContent = output.error || "Unknown error";
+      }
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement("div");
+      div.textContent = text;
+      return div.innerHTML;
+    }
+  </script>
+</body>
+</html>
+
